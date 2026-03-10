@@ -1,83 +1,65 @@
 import type { Request, Response } from "express";
+import { prisma } from "../../data/postgres/index.js";
+import { CreateTodoSchema } from "../../domain/dtos/create-todo.dto.js";
+import { UpdateTodoSchema } from "../../domain/dtos/update-todo.dto.js";
 
 export class TodosController {
-    private todos = [
-        {
-        id: '1',
-        title: 'Todo 1',
-        done: false,
-        createdAt: new Date()
-        },
-        {
-        id: '2',
-        title: 'Todo 2',
-        done: true,
-        createdAt: new Date()
-        },
-        {
-        id: '3',
-        title: 'Todo 3',
-        done: false,
-        createdAt: new Date()
-        }
-    ];
-
 
     // DI
     constructor() {}
 
-    public getTodos(req: Request, res: Response) {
-        return res.json(this.todos);
+    public async getTodos(req: Request, res: Response) {
+        const todos = await prisma.todo.findMany();
+        return res.json(todos);
     }
 
-    public getTodoById(req: Request, res: Response) {
-        const id = req.params.id;
-        const todo = this.todos.find(todo => todo.id === id);
+    public async getTodoById(req: Request, res: Response) {
+        const id = Number(req.params.id);
+        const todo = await prisma.todo.findUnique({
+            where: {
+                id
+            }
+        });
         if (!todo) {
             return res.status(404).json({ message: 'Todo no encontrado' });
         }
         return res.json(todo);
     }
 
-    public createTodo(req: Request, res: Response) {
-        console.log(req.body);
-        const { title } = req.body;
-        if (!title) {
-            return res.status(400).json({ message: 'Title es requerido' });
-        }
-        const todo = {
-            id: (this.todos.length + 1).toString(),
-            title,
-            done: false,
-            createdAt: new Date()
-        };
-        this.todos.push(todo);
+    public async createTodo(req: Request, res: Response) {
+        const result = CreateTodoSchema.safeParse(req.body);
+        if (!result.success) return res.status(400).json({ error: result.error.format() });
+
+        const todo = await prisma.todo.create({
+           data: result.data
+        });
         return res.json(todo);
     }
 
-    public updateTodo(req: Request, res: Response) {
-        const id = req.params.id;
-        const todo = this.todos.find(todo => todo.id === id);
-        if (!todo) {
-            return res.status(404).json({ message: 'Todo no encontrado' });
-        }
-        const { title, done } = req.body;
-        if (title) {
-            todo.title = title;
-        }
-        if (done !== undefined) {
-            todo.done = done;
-        }
+    public async updateTodo(req: Request, res: Response) {
+        const id = Number(req.params.id);
+        const result = UpdateTodoSchema.safeParse(req.body);
+        if (!result.success) return res.status(400).json({ error: result.error.format() });
+        const { title, completedAt } = result.data;
+        const todo = await prisma.todo.update({
+            where: {
+                id
+            },
+            data: {
+                title,
+                completedAt: (completedAt) ? new Date(completedAt) : null
+            }
+        });
         return res.json(todo);
     }
 
-    public deleteTodo(req: Request, res: Response) {
-        const id = req.params.id;
-        const todo = this.todos.find(todo => todo.id === id);
-        if (!todo) {
-            return res.status(404).json({ message: 'Todo no encontrado' });
-        }
-        this.todos = this.todos.filter(todo => todo.id !== id);
+    public async deleteTodo(req: Request, res: Response) {
+        const id = Number(req.params.id);
+        const todo = await prisma.todo.delete({
+            where: {
+                id
+            }
+        });
         return res.json(todo);
     }
 
